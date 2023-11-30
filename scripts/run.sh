@@ -11,7 +11,7 @@ SIZE=base
 LR=1.5e-4
 
 # LOAD_MODE=pretrain_$SIZE/step43000
-LOAD_MODE=/nas2/lishengping/other_models/gpt2-chinese/$SIZE
+LOAD_MODE=/nas2/qzj/other_models/gpt2-chinese/$SIZE
 TRAIN_PATH=/nas2/qzj/datas/med_data/data_with_pos_ner/train.jsonl
 EVAL_PATH=/nas2/qzj/datas/med_data/data_with_pos_ner/test.jsonl
 
