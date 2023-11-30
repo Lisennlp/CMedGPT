@@ -9,12 +9,13 @@ bash scripts/run.sh train
 ## eval
 bash scripts/run.sh eval
 
-##  安装apex
+## 如果你想使用fp16训练
+###  安装apex
 git clone https://github.com/NVIDIA/apex
 cd apex
 python setup.py install
 
-## apex问题
+### apex问题
 如果提示：
 if cached_x.grad_fn.next_functions[1][0].variable is not x: # error line
 IndexError: tuple index out of range
