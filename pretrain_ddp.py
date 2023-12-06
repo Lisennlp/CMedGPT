@@ -276,7 +276,6 @@ def main():
             batch_labels = batch['labels'].long().to(device)
             batch_poss = batch['poss'].long().to(device)
             batch_ners = batch['ners'].long().to(device)
-
             outputs = model.forward(input_ids=batch_inputs, 
                                     pos_tags=batch_poss,
                                     ner_tags=batch_ners,

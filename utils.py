@@ -87,6 +87,7 @@ class BaseDatasets(Dataset):
     def load_data(self, file_path):
         filename = file_path.rstrip('.jsonl') + f'{self.max_len}.pkl'
         if os.path.exists(filename):
+            print(f'’{filename}‘ is existed, starting to load data...')
             data = pickle.load(open(filename, 'rb'))
             return data
         data = []

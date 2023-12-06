@@ -204,6 +204,7 @@ class Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, q, k, v, attention_mask=None, head_mask=None):
+        # print(f'q: {q.shape} k: {k.shape}')
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
@@ -214,8 +215,9 @@ class Attention(nn.Module):
         #     w = w * b - 1e4 * (1 - b)
         if attention_mask is not None:
             # Apply the attention mask
+            # print(f'w: {w.shape}')
             w = w + attention_mask
-
+        # print(f'attention_mask: {attention_mask}')
         w = nn.Softmax(dim=-1)(w)
         w = self.attn_dropout(w)
 
@@ -473,7 +475,6 @@ class GPT2Model(GPT2PreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(past_length, input_ids.size(-1) + past_length, dtype=torch.long, device=input_ids.device)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
-
         # Attention mask.
         if attention_mask is not None:
             attention_mask = attention_mask.view(-1, input_shape[-1])
@@ -492,7 +493,12 @@ class GPT2Model(GPT2PreTrainedModel):
             #attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype) # fp16 compatibility
             attention_mask = attention_mask.to(dtype=torch.float32) # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
-
+        else:
+            attention_mask = torch.ones_like(input_ids).unsqueeze(-1).expand(input_ids.shape[0], input_ids.shape[1], input_ids.shape[1])
+            # 使用triu函数生成上三角矩阵
+            attention_mask = torch.triu(attention_mask, diagonal=0).unsqueeze(1)
+            attention_mask = attention_mask * -10000.0
+        # print(f'attention_mask00: {attention_mask} shape: {attention_mask.shape}')
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -650,7 +656,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            # loss_fct = CrossEntropyLoss(ignore_index=-1)
             # loss_fct_token = CrossEntropyLoss(ignore_index=-1, reduction='none')
             loss_fct = CrossEntropyLoss(ignore_index=-1)
 
