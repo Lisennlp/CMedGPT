@@ -179,6 +179,11 @@ def main():
     history = None
     while True:
         raw_text = input('请输入你要说的话:')
+        try:
+            raw_text = raw_text.decode('utf-8')
+        except UnicodeDecodeError as e:
+            raw_text = raw_text.decode('utf-8', errors='replace')
+            print(f"发生了解码错误: {e}")
         raw_text = f'{role}:{raw_text}'
         context_tokens = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(raw_text))
         assistant_tokens = [102] + tokenizer.convert_tokens_to_ids(tokenizer.tokenize(assistant))
