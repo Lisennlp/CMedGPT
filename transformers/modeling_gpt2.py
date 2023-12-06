@@ -100,9 +100,9 @@ def gelu(x):
 
 
 class RotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=30000, device=None):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        self.ntk = nn.Parameter(torch.tensor(0.5), requires_grad=True)
+        self.ntk = nn.Parameter(torch.tensor(1.0), requires_grad=True)
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
         self.register_buffer("inv_freq", inv_freq)
         # Build here to make `torch.jit.trace` work.
@@ -656,7 +656,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            # loss_fct_token = CrossEntropyLoss(ignore_index=-1, reduction='none')
+            loss_fct_token = CrossEntropyLoss(ignore_index=-1, reduction='none')
             loss_fct = CrossEntropyLoss(ignore_index=-1)
 
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),

@@ -92,6 +92,7 @@ def main():
     parser.add_argument('--use_rotary_emb', action='store_true', help='use_rotary_emb')
     parser.add_argument('--use_position_emb', action='store_true', help='use_position_emb')
     parser.add_argument('--save_model', action='store_true', help='whethor save model')
+    parser.add_argument("--skip_step", default=0, type=int, required=False, help="skip data step")
 
     args = parser.parse_args()
     print('args:\n' + args.__repr__())
@@ -272,6 +273,9 @@ def main():
     start_time = time.time()
     for epoch in range(args.epochs):
         for step,  batch in enumerate(train_dataloader):
+            if runed_steps < args.skip_step:
+                runed_steps += 1
+                continue
             batch_inputs = batch['input_ids'].long().to(device)
             batch_labels = batch['labels'].long().to(device)
             batch_poss = batch['poss'].long().to(device)

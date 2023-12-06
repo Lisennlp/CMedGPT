@@ -1,0 +1,11 @@
+python chat.py \
+  --device 0 \
+  --length 100 \
+  --tokenizer_path vocab.txt \
+  --model_path /nas2/lishengping/caiyun_projects/gpt2-chinese/pretrain_t2023_12_06_13_pos0_ner0_prompt0_base/step16000/ \
+  --topp 0.95 \
+  --temperature 1.1 \
+  --repetition_penalty 1.1 \
+  --nsamples 1 \
+  --batch_size 1 \
+  --topk 30

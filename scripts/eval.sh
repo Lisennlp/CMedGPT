@@ -29,19 +29,20 @@ current_year=$(date +%Y)
 current_month=$(date +%m)
 current_day=$(date +%d)
 current_hour=$(date +%H)
-POS_EMB=Rotary
-# POS_EMB=Postion
-
-OUT_DIR=pretrain_t"${current_year}_${current_month}_${current_day}_${current_hour}"_pos"$ADD_POS"_ner"$ADD_NER"_prompt"$ADD_PROMPT"_"$POS_EMB"_"$SIZE"/
-
-LOG_NAME="${current_year}_${current_month}_${current_day}_${current_hour}$POS_EMB"
-# LOG_NAME="0step_postion_eval_1024"
+# POS_EMB=Rotary
+POS_EMB=Postion
+MAX_LEN=1536
+skip_step=0
+BASE=10000
+# OUT_DIR=pretrain_t"${current_year}_${current_month}_${current_day}_${current_hour}"_pos"$ADD_POS"_ner"$ADD_NER"_prompt"$ADD_PROMPT"_"$POS_EMB"_"$SIZE"/
+# LOG_NAME="${current_year}_${current_month}_${current_day}_${current_hour}$POS_EMB"
+LOG_NAME="$skip_step"step_"$POS_EMB"_"$MAX_LEN"_"$BASE"
 
 # 512: 5118, 1024: 4590, 1536:3259, 2048: 2317, 3072:
 if [[ $1 == 'train' ]]; then
-    CUDA_VISIBLE_DEVICES=0,1,2,3 python -W ignore -m torch.distributed.launch $DISTRIBUTED_ARGS pretrain_ddp.py  --train_data_path $TRAIN_PATH --eval_data_path $EVAL_PATH --epochs 10  --log_step 2 --output_dir $OUT_DIR  --perrank_batch_size 4 --gradient_accumulation 1 --lr $LR --warmup_steps 1000 --pretrained_model $LOAD_MODEL --save_model_interval_steps 1000 --save_model --eval_step 1000 --add_pos $ADD_POS --add_ner $ADD_NER --add_prompt $ADD_PROMPT --fp16  --use_rotary_emb 2>&1 --max_len 512 --skip_step 0| tee logs/$SIZE.$LOG_NAME.$1.log
+    CUDA_VISIBLE_DEVICES=0,1,2,3 python -W ignore -m torch.distributed.launch $DISTRIBUTED_ARGS pretrain_ddp.py  --train_data_path $TRAIN_PATH --eval_data_path $EVAL_PATH --epochs 10  --log_step 2 --output_dir $OUT_DIR  --perrank_batch_size 4 --gradient_accumulation 1 --lr $LR --warmup_steps 1000 --pretrained_model $LOAD_MODEL --save_model_interval_steps 1000 --save_model --eval_step 1000 --add_pos $ADD_POS --add_ner $ADD_NER --add_prompt $ADD_PROMPT --fp16  --use_rotary_emb 2>&1 --max_len 512 --skip_step $skip_step| tee logs/$SIZE.$LOG_NAME.$1.log
 elif [[ $1 == 'eval' ]]; then
-    CUDA_VISIBLE_DEVICES=4,5,6,7 python -W ignore -m torch.distributed.launch $DISTRIBUTED_ARGS pretrain_ddp.py --eval_data_path $EVAL_PATH --log_step 2 --perrank_batch_size 4 --pretrained_model $LOAD_MODEL --add_pos $ADD_POS --add_ner $ADD_NER --add_prompt $ADD_PROMPT --fp16 --eval --use_position_emb --max_len 512 2>&1 | tee logs/$SIZE.$LOG_NAME.$1.log
+    CUDA_VISIBLE_DEVICES=4,5,6,7 python -W ignore -m torch.distributed.launch $DISTRIBUTED_ARGS pretrain_ddp.py --eval_data_path $EVAL_PATH --log_step 2 --perrank_batch_size 1 --pretrained_model $LOAD_MODEL --add_pos $ADD_POS --add_ner $ADD_NER --add_prompt $ADD_PROMPT --fp16 --eval --use_position_emb --max_len $MAX_LEN 2>&1 | tee logs/$SIZE.$LOG_NAME.$1.log
 elif [[ $1 == 'test_train' ]]; then
     CUDA_VISIBLE_DEVICES=1,2,4,5 python -W ignore -m torch.distributed.launch $DISTRIBUTED_ARGS pretrain_ddp.py --train_data_path $TRAIN_PATH --eval_data_path $EVAL_PATH --epochs 10  --log_step 2 --output_dir test_$SIZE/  --perrank_batch_size 4 --gradient_accumulation 4 --lr $LR --warmup_steps 1000 --pretrained_model $LOAD_MODEL  --save_model_interval_steps 1000 --eval_step 50 --add_pos $ADD_POS --add_ner $ADD_NER --add_prompt $ADD_PROMPT --fp16  --use_position_emb 2>&1 | tee logs/$SIZE.$LOG_NAME.$1.log
 elif [[ $1 == 'test_eval' ]]; then
