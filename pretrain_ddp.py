@@ -239,6 +239,11 @@ def main():
                 print(f'Index: {index} loss: {loss.item()} take: {time.time() - start_time}s')
             if multi_gpu:
                 loss = loss.mean()
+            nan_mask = torch.isnan(loss)
+            has_nan = torch.any(nan_mask).item()
+            if has_nan:
+                print(f'error: exist nan - {index}')
+                continue
             losses.append(loss.item())
             if stop_num is not None and index == stop_num:
                 break
