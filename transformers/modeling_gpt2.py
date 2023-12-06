@@ -100,12 +100,13 @@ def gelu(x):
 
 
 class RotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=2048, base=30000, device=None):
         super().__init__()
-        self.ntk = nn.Parameter(torch.tensor([1.0]))
+        self.ntk = nn.Parameter(torch.tensor(0.5), requires_grad=True)
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
         self.register_buffer("inv_freq", inv_freq)
         # Build here to make `torch.jit.trace` work.
+        # max_position_embeddings = 1536
         self.max_seq_len_cached = max_position_embeddings
         t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
@@ -160,7 +161,9 @@ class Attention(nn.Module):
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
         assert n_state % config.n_head == 0
+        # self.register_buffer("bias", torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
         self.register_buffer("bias", torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
+
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -172,9 +175,11 @@ class Attention(nn.Module):
         self.pruned_heads = set()
 
         self.use_rotary_emb = getattr(config, 'use_rotary_emb', False)
+        self.use_position_emb = getattr(config, 'use_position_emb', False)
+
         if self.use_rotary_emb:
             head_dim = n_state // config.n_head
-            self.rotary_emb = RotaryEmbedding(head_dim, max_position_embeddings=config.n_ctx)
+            self.rotary_emb = RotaryEmbedding(head_dim, max_position_embeddings=getattr(config, 'max_len', None))
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -203,9 +208,10 @@ class Attention(nn.Module):
         if self.scale:
             w = w / math.sqrt(v.size(-1))
         nd, ns = w.size(-2), w.size(-1)
-        b = self.bias[:, :, ns-nd:ns, :ns]
-        w = w * b - 1e4 * (1 - b)
-
+        # # lsp
+        # if self.use_position_emb:
+        #     b = self.bias[:, :, ns-nd:ns, :ns]
+        #     w = w * b - 1e4 * (1 - b)
         if attention_mask is not None:
             # Apply the attention mask
             w = w + attention_mask
@@ -246,7 +252,6 @@ class Attention(nn.Module):
             key = torch.cat((past_key, key), dim=-1)
             value = torch.cat((past_value, value), dim=-2)
         present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
-
         if self.use_rotary_emb:
             kv_seq_len = key.shape[-1] # 1024
             cos, sin = self.rotary_emb(value, seq_len=kv_seq_len)
@@ -416,7 +421,6 @@ class GPT2Model(GPT2PreTrainedModel):
         self.output_past = config.output_past
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
-        self.wpe = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
@@ -435,7 +439,9 @@ class GPT2Model(GPT2PreTrainedModel):
         if config.add_prompt:
             # [unused0]没有，从[unused1]开始，因此 + 1
             self.prompt = nn.Embedding(config.add_prompt + 1, config.n_embd)
-
+        if self.use_position_emb:
+            self.wpe = nn.Embedding(config.n_positions, config.n_embd)
+           
         self.init_weights()
 
     def _resize_token_embeddings(self, new_num_tokens):
@@ -452,6 +458,8 @@ class GPT2Model(GPT2PreTrainedModel):
     def forward(self, input_ids, pos_tags=None, ner_tags=None, past=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
+        # __import__('ipdb').set_trace()
+
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
         if position_ids is not None:
@@ -504,7 +512,6 @@ class GPT2Model(GPT2PreTrainedModel):
             # prompt id range is (0, 100)
             inputs_embeds[(input_ids > 0) & (input_ids <= self.add_prompt)] = self.prompt(input_ids[(input_ids > 0) & (input_ids <= self.add_prompt)])
 
-        position_embeds = self.wpe(position_ids)
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
@@ -513,6 +520,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # tag
         if self.use_position_emb:
+            position_embeds = self.wpe(position_ids)
             hidden_states = inputs_embeds + position_embeds + token_type_embeds
         else:
             hidden_states = inputs_embeds + token_type_embeds
@@ -642,9 +650,15 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
+            # loss_fct = CrossEntropyLoss(ignore_index=-1)
+            # loss_fct_token = CrossEntropyLoss(ignore_index=-1, reduction='none')
             loss_fct = CrossEntropyLoss(ignore_index=-1)
+
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1))
+            # loss_token = loss_fct_token(shift_logits.view(-1, shift_logits.size(-1)),
+            #                 shift_labels.view(-1))
+            # print(loss_token)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), lm_logits, presents, (all hidden_states), (attentions)

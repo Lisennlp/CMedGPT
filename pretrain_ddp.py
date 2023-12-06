@@ -4,6 +4,7 @@ import time
 import json
 import random
 import argparse
+import pickle
 
 from tqdm import tqdm
 import numpy as np
@@ -69,6 +70,7 @@ def main():
     parser.add_argument('--perrank_batch_size', default=8, type=int, required=False, help='train batch size every rank')
     parser.add_argument('--lr', default=1.5e-4, type=float, required=False, help='learning rate')
     parser.add_argument('--warmup_steps', default=2000, type=int, required=False, help='warm up steps')
+    parser.add_argument('--max_len', default=None, type=int, required=False, help='text max length')
     parser.add_argument('--log_step', default=1, type=int, required=False, help='How long steps to print loss')
     parser.add_argument('--eval_step', default=100, type=int, required=False, help='How long steps to eval model')
     parser.add_argument('--save_model_interval_steps', default=100, type=int, required=False, help='How long steps to save model')
@@ -118,8 +120,12 @@ def main():
         assert config.add_pos >= 3
     if config.add_prompt > 0 and config.add_ner:
         assert config.add_ner >= 3
-
-    max_len = config.n_ctx
+    # if args.max_len is not None:
+    #     max_len = args.max_len
+    #     config.n_ctx = max_len
+    # else:
+    config.max_len = args.max_len
+    max_len = args.max_len
     print(f'max_len: {max_len}')
 
     # vocab_file = os.path.join(args.pretrained_model, 'vocab.txt')
@@ -133,6 +139,17 @@ def main():
     eval_data_path = args.eval_data_path
     perrank_batch_size = args.perrank_batch_size
     output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    if not args.pretrained_model:
+        model = transformers.modeling_gpt2.GPT2LMHeadModel(config=config)
+    else:
+        model = transformers.modeling_gpt2.GPT2LMHeadModel.from_pretrained(args.pretrained_model, config=config)
+    if args.use_position_emb:
+        div = config.max_len - model.transformer.wpe.weight.data.shape[0]
+        if div > 0:
+            extend_embed = model.transformer.wpe.weight.data[-1:].expand(div, config.n_embd)
+            model.transformer.wpe.weight.data = torch.cat([model.transformer.wpe.weight.data, extend_embed], dim=0)
 
     eval_dataset = BaseDatasets(eval_data_path, 
                                 tokenizer=full_tokenizer, 
@@ -164,10 +181,7 @@ def main():
         train_batch_nums = len(train_dataloader)
         print(f'rank: {args.rank} train batch nums: {train_batch_nums}')
 
-    if not args.pretrained_model:
-        model = transformers.modeling_gpt2.GPT2LMHeadModel(config=config)
-    else:
-        model = transformers.modeling_gpt2.GPT2LMHeadModel.from_pretrained(args.pretrained_model, config=config)
+    
     model.train()
     model.to(device)
     optimizer = transformers.AdamW(model.parameters(), lr=args.lr, correct_bias=True)

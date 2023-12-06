@@ -3,6 +3,7 @@ import json
 import random
 from tqdm import tqdm
 import copy
+import pickle
 
 import torch
 from torch.utils.data import Dataset
@@ -30,8 +31,11 @@ class BaseDatasets(Dataset):
         self.add_prompt = add_prompt
         self.add_cls_token = add_cls_token
         self.generate_prompt()
-
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+        self.iter_nums = 0
         random.seed(self.seed)
+
         if os.path.isdir(file_path):
             files = os.listdir(file_path)
             total_data = []
@@ -44,12 +48,10 @@ class BaseDatasets(Dataset):
 
         random.shuffle(total_data)
         size = len(total_data)
-
         perrank_nums = size // self.world_size
+
         self.data = total_data[self.rank * perrank_nums: (self.rank + 1) * perrank_nums]
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-        self.iter_nums = 0
+     
 
     def generate_prompt(self):
         self.prompt_tokens = [f"[unused{i}]" for i in range(1, self.add_prompt + 1)]
@@ -64,8 +66,29 @@ class BaseDatasets(Dataset):
         if self.add_cls_token:
             token_ids = [self.tokenizer.cls_token_id] + token_ids
         return token_ids
+    
+    def combine_text(self, data):
+        length, count = 0, 0
+        tokens, ners, poss = [], [], []
+        combine_data = []
+        while count < len(data) - 1:
+            token, pos, ner = data[count]
+            length += len(token)
+            if length > self.max_len - self.add_cls_token:
+                combine_data.append([tokens, ners, poss])
+                tokens, ners, poss = token, pos, ner
+                length = len(token)
+            tokens.extend(token)
+            ners.extend(ner)
+            poss.extend(pos)
+            count += 1
+        return combine_data
 
     def load_data(self, file_path):
+        filename = file_path.rstrip('.jsonl') + f'{self.max_len}.pkl'
+        if os.path.exists(filename):
+            data = pickle.load(open(filename, 'rb'))
+            return data
         data = []
         with open(file_path, "r", encoding="utf-8") as file:
             for line in tqdm(file, desc="Loading data"):
@@ -73,6 +96,7 @@ class BaseDatasets(Dataset):
                 line = eval(line)
                 assert isinstance(line, dict)
                 tokens = self.prompt_tokens + list(line["tokens"])
+               
                 if self.add_pos:
                     poss = [2] * len(self.prompt_tokens) + list(line["poss"])
                     assert len(poss) == len(tokens)
@@ -80,7 +104,9 @@ class BaseDatasets(Dataset):
                     ners = [2] * len(self.prompt_tokens) + line["ners"]
                     assert len(ners) == len(tokens)
                 data.append([tokens, poss, ners])
+        data = self.combine_text(data)
         print(f"Data nums: {len(data)}")
+        pickle.dump(data, open(filename, 'wb'))
         return data
 
     def __len__(self):
@@ -120,6 +146,7 @@ class BaseDatasets(Dataset):
             print(f'prompt_tokens: {self.prompt_tokens}')
             print(f'prompt_ids: {input_ids[1 :len(self.prompt_tokens) + 1]}')
             print(f'input_ids: {input_ids} input_ids: {input_ids.shape}')
+            print(f'labels: {labels} labels: {labels.shape}')
             if self.add_pos:
                 print(f'poss: {poss} poss: {poss.shape} max: {poss.max()}')
             if self.add_ner:
