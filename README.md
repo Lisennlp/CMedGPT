@@ -21,3 +21,10 @@ if cached_x.grad_fn.next_functions[1][0].variable is not x: # error line
 IndexError: tuple index out of range
 则请看：
 https://github.com/NVIDIA/apex/pull/1282
+
+
+## finetuning
+
+  cd others
+  # 修改代码中相应的数据和模型路径
+  python medbert.py
