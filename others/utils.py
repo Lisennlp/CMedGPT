@@ -84,7 +84,7 @@ class BaseDatasets(Dataset):
         return combine_data
 
     def load_data(self, file_path):
-        filename = file_path.rstrip('.jsonl') + f'{self.max_len}.pkl'
+        filename = file_path.rstrip('.jsonl') + f'{self.max_len}.pkl.other2'
         if os.path.exists(filename):
             print(f'’{filename}‘ is existed, starting to load data...')
             data = pickle.load(open(filename, 'rb'))
@@ -130,7 +130,7 @@ class BaseDatasets(Dataset):
         length = len(input_ids)
         while length < self.max_len:
             input_ids.append(0)
-            labels.append(-1)
+            labels.append(0)
             if self.add_pos:
                 poss.append(0)
             if self.add_ner:
@@ -146,7 +146,7 @@ class BaseDatasets(Dataset):
             print(f'prompt_tokens: {self.prompt_tokens}')
             print(f'prompt_ids: {input_ids[1 :len(self.prompt_tokens) + 1]}')
             print(f'input_ids: {input_ids} input_ids: {input_ids.shape}')
-            print(f'labels: {labels} labels: {labels.shape}')
+            print(f'labels: {labels} shape: {labels.shape}')
             if self.add_pos:
                 print(f'poss: {poss} poss: {poss.shape} max: {poss.max()}')
             if self.add_ner:
