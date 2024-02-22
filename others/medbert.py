@@ -70,5 +70,5 @@ for epoch in range(epochs):
     average_loss = total_loss / len(train_loader)
     print(f"Average Loss: {average_loss}")
 
-model.save_pretrained("finetuned_dialogue_bart_model")
+model.save_pretrained("finetuned_medbert_model")
 
